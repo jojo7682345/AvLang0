@@ -10,6 +10,7 @@ linker = "gcc";
 flags=[
     "-ggdb",
     compileString("-DPROJECT_NAME=\"$PROJECT_NAME\""),
+	compileString("$#NIX_CFLAGS_COMPILE"),
 ];
 linkFlags=[
 ];
@@ -18,19 +19,20 @@ includes=[
 ];
 
 libDirs=[
-    "lib/avUtils/lib"
 ];
 libs=[
     "m",
-    "c"
+    "c",
+	"avUtils",
 ];
 srcDir = [
     "src"
 ];
 
-AvLang(){
+avLang(){
 	perform{
-		println("building AvUtils sucessfull");
+		
+		makeDirs("bin");
 		executable = build(getSourceFiles(srcDir), "build", flags, linkFlags, includes, libDirs, libs, PROJECT_NAME, "bin");
 	}
 

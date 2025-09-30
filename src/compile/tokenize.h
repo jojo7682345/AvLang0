@@ -89,7 +89,7 @@ typedef struct Token {
 struct TokenList {
 	const struct Token* tokens;
 	const uint64 tokenCount;
-	const uint64 currentToken;
+	uint64 currentToken;
 };
 
 bool32 tokenize(struct CompilerCommand command, struct StringBuffer input, struct TokenList* tokens);

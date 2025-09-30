@@ -24,7 +24,7 @@ bool32 streq(const char* strA, const char* strB){
 }
 
 void printStr(const char* const str){
-	write(0, str, strlen(str));
+	(void)write(0, str, strlen(str));
 }
 
 

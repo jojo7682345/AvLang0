@@ -6,13 +6,11 @@
 #include "tokenize.h"
 
 
+typedef uint32 Expression;
 enum ExpressionType{
 	EXPRESSION_TYPE_NONE,
 	EXPRESSION_TYPE_UNARY,
-	EXPRESSION_TYPE_FACTOR,
-	EXPRESSION_TYPE_TERM,
-	EXPRESSION_TYPE_COMPARISON,
-	EXPRESSION_TYPE_EQUALITY,
+	EXPRESSION_TYPE_BINARY,
 	
 	EXPRESSION_TYPE_PRIMARY,
 	EXPRESSION_TYPE_EXPRESSION,
@@ -39,29 +37,30 @@ enum BinaryType {
 };
 
 struct BinaryExpression {
-	struct Expression* expressionLeft;
+	Expression left;
 	enum BinaryType type;
-	struct Expression* expressionRight;
+	Expression right;
 };
 
-typedef struct Expression{
+struct Expression{
 	enum ExpressionType type;
 	uint64 tokenStart;
 	uint64 tokenEnd;
 	union {
-		struct Expression* expression;
+		Expression expression;
 		struct UnaryExpression unary;
 		struct BinaryExpression binary;
 	};
-} Expression;
+};
+
 
 
 struct AbstractSyntaxTree {
-
+	void* astMemory;
 };
 
-bool32 parse(struct CompilerCommand command, struct TokenList input, struct AbstractSyntaxTree* tokens);
+bool32 parse(struct CompilerCommand command, struct TokenList input, struct AbstractSyntaxTree* ast);
 
-void printAST(struct TokenList tokens);
+void printAST(struct TokenList tokens, struct AbstractSyntaxTree* ast);
 
 #endif//__PARSE_H__

@@ -1,9 +1,7 @@
 {
   "nodes": {
     "avUtils": {
-      "inputs": {
-        "nixpkgs": "nixpkgs"
-      },
+      "flake": false,
       "locked": {
         "lastModified": 1758632750,
         "narHash": "sha256-TPwS66serRWGEE7spOqkVbUp+OP8roeW3S1zLjZLE8I=",
@@ -26,11 +24,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1758634536,
-        "narHash": "sha256-Cyk71UnHCDvDP/pnY4EyD0Mcec9kHFp6IzHMRgUk4vw=",
+        "lastModified": 1759233505,
+        "narHash": "sha256-rVffDcql7qJ5+8LhZiHPhvcwSZhN67/Ei96300rNGKU=",
         "owner": "jojo7682345",
         "repo": "avBuilder",
-        "rev": "fa375d003cc00b4da68120fe4dd0e61a6b65b2fe",
+        "rev": "aa32443b6e44a5922df55981f985fd347c94a14a",
         "type": "github"
       },
       "original": {
@@ -40,22 +38,6 @@
       }
     },
     "nixpkgs": {
-      "locked": {
-        "lastModified": 1758427187,
-        "narHash": "sha256-pHpxZ/IyCwoTQPtFIAG2QaxuSm8jWzrzBGjwQZIttJc=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "554be6495561ff07b6c724047bdd7e0716aa7b46",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_2": {
       "locked": {
         "lastModified": 1759036355,
         "narHash": "sha256-0m27AKv6ka+q270dw48KflE0LwQYrO7Fm4/2//KCVWg=",
@@ -74,7 +56,7 @@
     "root": {
       "inputs": {
         "avbuilder": "avbuilder",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs"
       }
     }
   },

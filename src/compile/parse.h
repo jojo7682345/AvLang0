@@ -36,6 +36,10 @@ enum BinaryType {
 	BINARY_TYPE_MODULO,
 };
 
+struct NumericExpression {
+	Token* number;
+};
+
 struct BinaryExpression {
 	Expression left;
 	enum BinaryType type;
@@ -43,13 +47,16 @@ struct BinaryExpression {
 };
 
 struct Expression{
-	enum ExpressionType type;
-	uint64 tokenStart;
-	uint64 tokenEnd;
+	const enum ExpressionType type;
+	const uint64 expressionStart;
+	const uint64 expressionEnd;
 	union {
-		Expression expression;
-		struct UnaryExpression unary;
-		struct BinaryExpression binary;
+		const Expression expression;
+		const struct UnaryExpression unary;
+		const struct BinaryExpression binary;
+		const Token* numeric;
+		const Token* string;
+		const Token* identifier;
 	};
 };
 

@@ -1,0 +1,38 @@
+#!/usr/bin/avBuilder
+import global "std/c/stdc.project" {
+    buildExecutable as build;
+    getSourceFiles;
+}
+
+compiler = "gcc";
+linker = "gcc";
+
+flags=[
+    "-ggdb",
+    compileString("-DPROJECT_NAME=\"$PROJECT_NAME\""),
+];
+linkFlags=[
+];
+includes=[
+    "include",
+];
+
+libDirs=[
+    "lib/avUtils/lib"
+];
+libs=[
+    "m",
+    "c"
+];
+srcDir = [
+    "src"
+];
+
+AvLang(){
+	perform{
+		println("building AvUtils sucessfull");
+		executable = build(getSourceFiles(srcDir), "build", flags, linkFlags, includes, libDirs, libs, PROJECT_NAME, "bin");
+	}
+
+
+}

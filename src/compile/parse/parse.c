@@ -51,7 +51,10 @@ static const struct Token* _scan(Parser* input, bool32 advance, enum TokenType t
 	return nullptr;
 }
 
-void _logSyntaxError(Parser* parser,)
+#define logSyntaxError(parser, ...) _logSyntaxError(parser, __VA_ARGS__ __VA_OPT__(,) TOKEN_TYPE_NONE)
+void _logSyntaxError(Parser* parser,...){
+
+}
 
 uint64 getTokenStart(const Token* const token){
 	return token->position.offset;
@@ -125,7 +128,187 @@ static Expression parsePrimary(Parser* parser){
 			return INVALID_EXPRESSION;
 		}
 	}
+}
+
+static Expression parseUnary(Parser* parser){
+	const Token* token;
+	if((token = match(parser, TOKEN_TYPE_MINUS, TOKEN_TYPE_LOGICAL_NOT, TOKEN_TYPE_INCREMENT, TOKEN_TYPE_DECREMENT, TOKEN_TYPE_LOGICAL_INVERT))){
+		uint64 expressionStart = getTokenStart(token);
+		enum UnaryType operator;
+		switch(token->type){
+			case TOKEN_TYPE_MINUS:
+				operator = UNARY_TYPE_NEGATE;
+				break;
+			case TOKEN_TYPE_LOGICAL_NOT:
+				operator = UNARY_TYPE_LOGICAL_NOT;
+				break;
+			case TOKEN_TYPE_INCREMENT:
+				operator = UNARY_TYPE_PRE_INCREMENT;
+				break;
+			case TOKEN_TYPE_DECREMENT:
+				operator = UNARY_TYPE_PRE_DECREMENT;
+				break;
+			case TOKEN_TYPE_LOGICAL_INVERT:
+				operator = UNARY_TYPE_LOGICAL_INVERT;
+				break;
+		}
+		Expression inner = parseUnary(parser);
+		struct Expression expr = {
+			.type = EXPRESSION_TYPE_UNARY,
+			.expressionStart = expressionStart,
+			.expressionEnd = GET_EXPRESSION(inner, parser)->expressionEnd,
+			.unary = {
+				.type = operator,
+				.inner = inner,
+			},
+		};
+		return createExpression(parser, expr);
+	}
 	
+	Expression primary = parsePrimary(parser);
+
+	if((token = match(parser, TOKEN_TYPE_INCREMENT, TOKEN_TYPE_DECREMENT))){
+		enum UnaryType operator;
+		switch(token->type){
+			case TOKEN_TYPE_INCREMENT:
+				operator = UNARY_TYPE_POST_INCREMENT;
+				break;
+			case TOKEN_TYPE_DECREMENT:
+				operator = UNARY_TYPE_POST_DECREMENT;
+				break;
+		}
+		struct Expression expr = {
+			.type = EXPRESSION_TYPE_UNARY,
+			.expressionStart = GET_EXPRESSION(primary, parser)->expressionStart,
+			.expressionEnd = getTokenEnd(token),
+			.unary = {
+				.type = operator,
+				.inner = primary,
+			},
+		};
+		return createExpression(parser, expr);
+	}
+
+	return primary;
+}
+
+static Expression parseFactor(Parser* parser){
+	Expression left = parseUnary(parser);
+
+	const Token* token;
+	while((token = match(parser, TOKEN_TYPE_MULTIPLY, TOKEN_TYPE_DIVIDE, TOKEN_TYPE_MODULUS))){
+		enum BinaryType operator;
+		switch(token->type){
+			case TOKEN_TYPE_MULTIPLY:
+				operator = BINARY_TYPE_MULTIPLICATION;
+				break;
+			case TOKEN_TYPE_DIVIDE:
+				operator = BINARY_TYPE_DIVISION;
+				break;
+			case TOKEN_TYPE_MODULUS:
+				operator = BINARY_TYPE_MODULO;
+				break;
+		}
+
+		Expression right = parseUnary(parser);
+		struct Expression expr = {
+			.type = EXPRESSION_TYPE_BINARY,
+			.expressionStart = GET_EXPRESSION(left, parser)->expressionStart,
+			.expressionEnd = GET_EXPRESSION(right, parser)->expressionEnd,
+			.binary = {
+				.left = left,
+				.type = operator,
+				.right = right,
+			},
+		};
+		left = createExpression(parser, expr);
+	}
+
+	return left;
+}
+
+static Expression parseTerm(Parser* parser){
+	Expression left = parseFactor(parser);
+
+	const Token* token;
+	while((token = match(parser, TOKEN_TYPE_PLUS, TOKEN_TYPE_MINUS))){
+		enum BinaryType operator;
+		switch(token->type){
+			case TOKEN_TYPE_PLUS:
+				operator = BINARY_TYPE_ADDITION;
+				break;
+			case TOKEN_TYPE_MINUS:
+				operator = BINARY_TYPE_SUBTRACTION;
+				break;
+		}
+
+		Expression right = parseFactor(parser);
+		struct Expression expr = {
+			.type = EXPRESSION_TYPE_BINARY,
+			.expressionStart = GET_EXPRESSION(left, parser)->expressionStart,
+			.expressionEnd = GET_EXPRESSION(right, parser)->expressionEnd,
+			.binary = {
+				.left = left,
+				.type = operator,
+				.right = right,
+			},
+		};
+		left = createExpression(parser, expr);
+	}
+
+	return left;
+}
+
+static Expression parseComparison(Parser* parser){
+	Expression left = parseTerm(parser);
+
+	const Token* token;
+	while((token = match(parser, 
+		TOKEN_TYPE_LESS_THAN, TOKEN_TYPE_LESS_THAN_OR_EQUALS, 
+		TOKEN_TYPE_GREATER_THAN, TOKEN_TYPE_GREATER_THAN_OR_EQUALS,
+		TOKEN_TYPE_EQUALS, TOKEN_TYPE_NOT_EQUALS
+	))){
+		enum BinaryType operator;
+		switch(token->type){
+			case TOKEN_TYPE_LESS_THAN:
+				operator = BINARY_TYPE_MULTIPLICATION;
+				break;
+			case TOKEN_TYPE_LESS_THAN_OR_EQUALS:
+				operator = BINARY_TYPE_DIVISION;
+				break;
+			case TOKEN_TYPE_GREATER_THAN:
+				operator = BINARY_TYPE_MODULO;
+				break;
+			case TOKEN_TYPE_GREATER_THAN_OR_EQUALS:
+				operator = BINARY_TYPE_MODULO;
+				break;
+			case TOKEN_TYPE_EQUALS:
+				operator = BINARY_TYPE_MODULO;
+				break;
+			case TOKEN_TYPE_NOT_EQUALS:
+				operator = BINARY_TYPE_MODULO;
+				break;
+		}
+
+		Expression right = parseUnary(parser);
+		struct Expression expr = {
+			.type = EXPRESSION_TYPE_BINARY,
+			.expressionStart = GET_EXPRESSION(left, parser)->expressionStart,
+			.expressionEnd = GET_EXPRESSION(right, parser)->expressionEnd,
+			.binary = {
+				.left = left,
+				.type = operator,
+				.right = right,
+			},
+		};
+		left = createExpression(parser, expr);
+	}
+
+	return left;
+}
+
+static Expression parseExpression(Parser* parser){
+	return parseComparison(parser);
 }
 
 bool32 parse(struct CompilerCommand command, struct TokenList input, AbstractSyntaxTree* ast){	

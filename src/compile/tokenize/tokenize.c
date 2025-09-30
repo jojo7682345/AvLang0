@@ -171,11 +171,33 @@ bool32 tokenize(struct CompilerCommand command, struct StringBuffer input, struc
 			case '#': addToken(TOKEN_TYPE_HASH, start, current); break;
 			case ',': addToken(TOKEN_TYPE_COMMA, start, current); break;
 			case '.': addToken(TOKEN_TYPE_DOT, start, current); break;
-			case '-': addToken(TOKEN_TYPE_MINUS, start, current); break;
-			case '+': addToken(TOKEN_TYPE_PLUS, start, current); break;
+			case '~': addToken(TOKEN_TYPE_LOGICAL_INVERT, start, current); break;
+			case '-': 
+				if(MATCH('-')){
+					addToken(TOKEN_TYPE_DECREMENT, start, current);
+					break;
+				}
+				if(MATCH('=')){
+					addToken(TOKEN_TYPE_DECREMENT_ASSIGN, start, current);
+					break;
+				}
+				addToken(TOKEN_TYPE_MINUS, start, current);
+				break;
+			case '+': 
+				if(MATCH('+')){
+					addToken(TOKEN_TYPE_INCREMENT, start, current);
+					break;
+				}
+				if(MATCH('=')){
+					addToken(TOKEN_TYPE_INCREMENT_ASSIGN, start, current);
+					break;
+				}
+				addToken(TOKEN_TYPE_PLUS, start, current);
+				break;
 			case ';': addToken(TOKEN_TYPE_SEMICOLON, start, current); break;
 			case '*': addToken(TOKEN_TYPE_MULTIPLY, start, current); break;
 			case '@': addToken(TOKEN_TYPE_AMPERSANT, start, current); break;
+			case '%': addToken(TOKEN_TYPE_MODULUS, start, current); break;
 			case '!':
 				addToken(MATCH('=')?TOKEN_TYPE_NOT_EQUALS:TOKEN_TYPE_LOGICAL_NOT, start, current);
 				break;

@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <utils.h>
 
 #define ANSI_COLOR_RED		"\x1b[31m"
 #define ANSI_COLOR_GREEN	"\x1b[32m"
@@ -167,7 +168,7 @@ bool32 checkMessageDisabled(AvResult result) {
 
 void setProjectDetails(const char* projectName, uint32 version) {
 
-	if (strlen(projectName) >= 64) {
+	if (cstrlen(projectName) >= 64) {
 		avAssert(AV_MEMORY_ERROR, 0, "project name must be shorter than 63 characters");
 	}
 	strcpy((void*)AV_LOG_PROJECT_NAME, projectName);

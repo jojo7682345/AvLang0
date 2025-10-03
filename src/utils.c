@@ -4,7 +4,7 @@
 #include <fcntl.h>
 
 
-uint64 strlen(const char* const str){
+uint64 cstrlen(const char* const str){
 	if(str==NULL){ return 0; }
 	size_t size = 0;
 	while(str[size++]);
@@ -12,8 +12,8 @@ uint64 strlen(const char* const str){
 }
 
 bool32 streq(const char* strA, const char* strB){
-	uint64 lenA = strlen(strA);
-	uint64 lenB = strlen(strB);
+	uint64 lenA = cstrlen(strA);
+	uint64 lenB = cstrlen(strB);
 	uint64 cmpLen = min(lenA, lenB);
 	for(uint64 i = 0; i < cmpLen; i++){
 		if(strA[i]!=strB[i]){
@@ -24,7 +24,7 @@ bool32 streq(const char* strA, const char* strB){
 }
 
 void printStr(const char* const str){
-	int a = write(0, str, strlen(str));
+	int a = write(0, str, cstrlen(str));
 	(void)a;
 }
 

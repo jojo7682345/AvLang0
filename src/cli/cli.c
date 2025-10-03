@@ -127,7 +127,7 @@ struct CompilerCommandStatusFlags parseOutputFile(struct Arguments* args, struct
 		return status;
 	}
 
-	uint64 len = strlen(outputFile);
+	uint64 len = cstrlen(outputFile);
 	if(len==0){
 		status.errors.invalidCommand = 1;
 		return status;
@@ -242,7 +242,7 @@ struct CompilerCommandStatusFlags parseArgument(struct Arguments* args, struct C
 	if(current == NULL){
 		return status;
 	}
-	uint64 len = strlen(current);
+	uint64 len = cstrlen(current);
 	if(len==0){
 		status.errors.unrecognizedFlag = 1;
 		return status;

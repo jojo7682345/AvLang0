@@ -4,7 +4,7 @@
 #include <types.h>
 #include "compilerState.h"
 
-uint64 strlen(const char* const str);
+uint64 cstrlen(const char* const str);
 bool32 streq(const char* strA, const char* strB);
 
 void printStr(const char* str);

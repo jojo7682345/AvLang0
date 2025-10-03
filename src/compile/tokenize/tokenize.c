@@ -31,7 +31,7 @@ static bool8 tokenMask[sizeof(tokenList)/sizeof(struct TokenScan)] = {0};
 
 static uint64 countLines(const char* str){
 	uint64 lineCount = 1;
-	uint64 length = strlen(str);
+	uint64 length = cstrlen(str);
 	for(uint64 i = 0; i < length; i++){
 		if(str[i] == '\n'){
 			lineCount++;
@@ -170,7 +170,8 @@ bool32 tokenize(struct CompilerCommand command, struct StringBuffer input, struc
 			case ']': addToken(TOKEN_TYPE_BRACKET_CLOSE, start, current); break;
 			case '#': addToken(TOKEN_TYPE_HASH, start, current); break;
 			case ',': addToken(TOKEN_TYPE_COMMA, start, current); break;
-			case '.': addToken(TOKEN_TYPE_DOT, start, current); break;
+			case '.': 
+				addToken(MATCH('.')?TOKEN_TYPE_RANGE : TOKEN_TYPE_DOT, start, current); break;
 			case '~': addToken(TOKEN_TYPE_LOGICAL_INVERT, start, current); break;
 			case '-': 
 				if(MATCH('-')){

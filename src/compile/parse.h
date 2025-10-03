@@ -75,7 +75,8 @@ struct Expression{
 
 
 struct AbstractSyntaxTree {
-	void* astMemory;
+	struct Expression* expressions;
+	uint32 rootExpression;
 };
 
 bool32 parse(struct CompilerCommand command, struct TokenList input, struct AbstractSyntaxTree* ast);

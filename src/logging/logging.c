@@ -324,7 +324,7 @@ void printTags(AvResult result, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, bool32 print
 		fprintf(stdout, "[func: %s]", func);
 	}
 	if (AV_LOG_LINE) {
-		fprintf(stdout, "[line %llu]", line);
+		fprintf(stdout, "[line %lu]", line);
 	}
 	if (AV_LOG_FILE) {
 		fprintf(stdout, "[file: %s]", file);

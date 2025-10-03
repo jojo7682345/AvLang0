@@ -127,6 +127,7 @@ static Expression parsePrimary(Parser* parser){
 			logSyntaxError(parser, TOKEN_TYPE_PARENTHESESE_CLOSE);
 			return INVALID_EXPRESSION;
 		}
+		return inner;
 	}
 }
 
@@ -151,6 +152,8 @@ static Expression parseUnary(Parser* parser){
 			case TOKEN_TYPE_LOGICAL_INVERT:
 				operator = UNARY_TYPE_LOGICAL_INVERT;
 				break;
+			default:
+				return INVALID_EXPRESSION;
 		}
 		Expression inner = parseUnary(parser);
 		struct Expression expr = {
@@ -176,6 +179,7 @@ static Expression parseUnary(Parser* parser){
 			case TOKEN_TYPE_DECREMENT:
 				operator = UNARY_TYPE_POST_DECREMENT;
 				break;
+			default: return INVALID_EXPRESSION;
 		}
 		struct Expression expr = {
 			.type = EXPRESSION_TYPE_UNARY,
@@ -208,6 +212,7 @@ static Expression parseFactor(Parser* parser){
 			case TOKEN_TYPE_MODULUS:
 				operator = BINARY_TYPE_MODULO;
 				break;
+			default: return INVALID_EXPRESSION;
 		}
 
 		Expression right = parseUnary(parser);
@@ -240,6 +245,7 @@ static Expression parseTerm(Parser* parser){
 			case TOKEN_TYPE_MINUS:
 				operator = BINARY_TYPE_SUBTRACTION;
 				break;
+			default: return INVALID_EXPRESSION;
 		}
 
 		Expression right = parseFactor(parser);
@@ -271,23 +277,24 @@ static Expression parseComparison(Parser* parser){
 		enum BinaryType operator;
 		switch(token->type){
 			case TOKEN_TYPE_LESS_THAN:
-				operator = BINARY_TYPE_MULTIPLICATION;
+				operator = BINARY_TYPE_LESS_THAN;
 				break;
 			case TOKEN_TYPE_LESS_THAN_OR_EQUALS:
-				operator = BINARY_TYPE_DIVISION;
+				operator = BINARY_TYPE_LESS_THAN_OR_EQUAL;
 				break;
 			case TOKEN_TYPE_GREATER_THAN:
-				operator = BINARY_TYPE_MODULO;
+				operator = BINARY_TYPE_GREATER_THAN;
 				break;
 			case TOKEN_TYPE_GREATER_THAN_OR_EQUALS:
-				operator = BINARY_TYPE_MODULO;
+				operator = BINARY_TYPE_GREATER_THAN_OR_EQUAL;
 				break;
 			case TOKEN_TYPE_EQUALS:
-				operator = BINARY_TYPE_MODULO;
+				operator = BINARY_TYPE_EQUALS;
 				break;
 			case TOKEN_TYPE_NOT_EQUALS:
-				operator = BINARY_TYPE_MODULO;
+				operator = BINARY_TYPE_NOT_EQUALS;
 				break;
+			default: return INVALID_EXPRESSION;
 		}
 
 		Expression right = parseUnary(parser);
@@ -298,7 +305,7 @@ static Expression parseComparison(Parser* parser){
 			.binary = {
 				.left = left,
 				.type = operator,
-				.right = right,
+				.right = right, 
 			},
 		};
 		left = createExpression(parser, expr);
@@ -312,19 +319,80 @@ static Expression parseExpression(Parser* parser){
 }
 
 bool32 parse(struct CompilerCommand command, struct TokenList input, AbstractSyntaxTree* ast){	
-	struct {
-		struct TokenList input;
-		AvDynamicArray astMemory;
-	} scan = {
-		.input = input,
-	};
-	avDynamicArrayCreate(0, sizeof(struct Expression), &scan.astMemory);
-	
-	
 
+	Parser parser = {
+		.tokens = &input,
+	};
+	avDynamicArrayCreate(0, sizeof(struct Expression), &parser.expressions);
+	
+	ast->rootExpression = parseExpression(&parser);
+	ast->expressions = avCallocate(avDynamicArrayGetSize(parser.expressions), sizeof(struct Expression), "");
+	avDynamicArrayReadRange(ast->expressions, avDynamicArrayGetSize(parser.expressions), 0, sizeof(struct Expression), 0, parser.expressions);
 	return true;
 }
-
-void printAST(struct TokenList tokens, AbstractSyntaxTree* ast){
-	
+// Helper for indentation
+static void printIndent(int level) {
+    for (int i = 0; i < level; ++i) {
+        printf("  ");
+    }
 }
+
+// Recursive expression printer
+static void printExpression(struct Expression* expressions, Expression index, int indentLevel) {
+    struct Expression* expr = expressions + index;
+    if (!expr) {
+        printIndent(indentLevel);
+        printf("<invalid expression>\n");
+        return;
+    }
+
+    printIndent(indentLevel);
+    switch (expr->type) {
+        case EXPRESSION_TYPE_NUMBER_LITERAL:
+            printf("NumberLiteral: %.*s\n",
+                (int)expr->numeric->text.length,
+                expr->numeric->text.start);
+            break;
+
+        case EXPRESSION_TYPE_STRING_LITERAL:
+            printf("StringLiteral: \"%.*s\"\n",
+                (int)expr->string->text.length,
+                expr->string->text.start);
+            break;
+
+        case EXPRESSION_TYPE_IDENTIFIER:
+            printf("Identifier: %.*s\n",
+                (int)expr->identifier->text.length,
+                expr->identifier->text.start);
+            break;
+
+        case EXPRESSION_TYPE_UNARY:
+            printf("UnaryExpression (%d):\n", expr->unary.type);
+            printExpression(expressions, expr->unary.inner, indentLevel + 1);
+            break;
+
+        case EXPRESSION_TYPE_BINARY:
+            printf("BinaryExpression (%d):\n", expr->binary.type);
+            printIndent(indentLevel + 1);
+            printf("Left:\n");
+            printExpression(expressions, expr->binary.left, indentLevel + 2);
+            printIndent(indentLevel + 1);
+            printf("Right:\n");
+            printExpression(expressions, expr->binary.right, indentLevel + 2);
+            break;
+
+        case EXPRESSION_TYPE_NONE:
+            printf("Invalid/Empty Expression\n");
+            break;
+
+        default:
+            printf("Unknown Expression Type (%d)\n", expr->type);
+            break;
+    }
+}
+
+void printAST(struct TokenList tokens, AbstractSyntaxTree* ast) {
+    printf("=== Abstract Syntax Tree ===\n");
+    printExpression(ast->expressions, ast->rootExpression, 0);
+}
+

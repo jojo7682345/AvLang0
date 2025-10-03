@@ -117,7 +117,7 @@ int main(const int argC, const char* argV[]){
 		goto compilationTerminated;
 	}
 	avLog(AV_SUCCESS, "parsed tokens");
-
+	printAST(tokens, &ast);
 
 	avLog(AV_INFO, "compilation completed");
 

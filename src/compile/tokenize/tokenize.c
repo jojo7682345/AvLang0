@@ -338,8 +338,8 @@ void printTokens(struct TokenList tokens){
 		char lengthStr[128] = {0};
 		const char* typeStr = tokenNames[(sizeof(tokenNames)/sizeof(const char*)-1)];
 		char tokStr[128] = {0};
-		sprintf(lineStr, "%u", token.position.line);
-		sprintf(lengthStr, "%u", token.text.length);
+		sprintf(lineStr, "%lu", token.position.line);
+		sprintf(lengthStr, "%lu", token.text.length);
 		for(uint32 j = 0; j < sizeof(tokenList)/sizeof(struct TokenScan); j++){
 			if(tokenList[j].type == token.type){
 				typeStr = tokenNames[j];

@@ -10,6 +10,7 @@
 #define AV_DYNAMIC_ARRAY_ADVANCED
 #define AV_DYNAMIC_ARRAY_EXPOSE_MEMORY_LAYOUT
 #include <AvUtils/dataStructures/avDynamicArray.h>
+#include <AvUtils/memory/avAllocator.h>
 #include <AvUtils/avMemory.h>
 #define AV_LOG_CATEGORY PARSE_CATEGORY
 #include <logging.h>
@@ -19,6 +20,10 @@ typedef struct AbstractSyntaxTree AbstractSyntaxTree;
 typedef struct Parser {
 	struct TokenList* tokens;
 	AvDynamicArray expressions;
+	AvDynamicArray statements;
+	AvDynamicArray types;
+	AvDynamicArray tags;
+	AvAllocator* allocator;
 }Parser;
 
 
@@ -65,20 +70,14 @@ uint64 getTokenEnd(const Token* const token){
 }
 #define GET_EXPRESSION(expression, parser) ((struct Expression*)avDynamicArrayGetPtr(expression, parser->expressions))
 #define INVALID_EXPRESSION ((uint32)-1)
-#define BINARY_EXPRESSION(parser, leftExpression, operator, rightExpression) {\
-	.type=EXPRESSION_TYPE_BINARY,\
-	.expressionStart = GET_EXPRESSION(leftExpression, parser)->expressionStart,\
-	.expressionEnd = GET_EXPRESSION(rightExpression, parser)->expressionEnd,\
-	.binary = {\
-		.left = leftExpression,\
-		.type = operator,\
-		.right = rightExpression,\
-	},\
-}
-#define CREATE_BINARY_EXPRESSION(parser, left, operator, right) \
-	createExpression(parser, (struct Expression) BINARY_EXPRESSION(parser, left, operator, right))
+#define INVALID_STATEMENT INVALID_EXPRESSION
+
 static Expression createExpression(Parser* parser, struct Expression expression){
 	return avDynamicArrayAdd(&expression, parser->expressions);
+}
+
+static Statement createStatement(Parser* parser, struct Statement statement){
+	return avDynamicArrayAdd(&statement, parser->statements);
 }
 
 static Expression parseExpression(Parser* parser);
@@ -318,12 +317,129 @@ static Expression parseExpression(Parser* parser){
 	return parseComparison(parser);
 }
 
+static Statement parseFunction(Parser* parser, Type type, const Token* identifier){
+	uint32 functionTagCount = 0;
+	struct Tag* functionTags;
+	uint32 parameterCount = 0;
+	struct FunctionParameter* parameters;
+	Statement body = INVALID_STATEMENT;
+	if(match(parser, TOKEN_TYPE_BRACE_OPEN)){
+		AvDynamicArray tags = AV_EMPTY;
+		avDynamicArrayCreate(0, sizeof(struct Tag), &tags);
+		parseTags(parser, tags);
+		functionTagCount = avDynamicArrayGetSize(tags);
+		functionTags = avAllocatorAllocate(sizeof(struct Tag)*functionTagCount, parser->allocator);
+		avDynamicArrayReadRange(functionTags, functionTagCount, 0, sizeof(struct Tag), 0, tags);
+		avDynamicArrayDestroy(tags);
+		if(!consume(parser, TOKEN_TYPE_BRACE_CLOSE)){
+			logSyntaxError(parser, TOKEN_TYPE_BRACE_CLOSE);
+			return INVALID_STATEMENT;
+		}
+	}
+	if(!consume(parser, TOKEN_TYPE_PARENTHESESE_OPEN)){
+		AvDynamicArray params = AV_EMPTY;
+		avDynamicArrayCreate(0, sizeof(struct FunctionParameter), &params);
+		do{
+			parseFunctionParameter(parser, params);
+		}while(match(parser, TOKEN_TYPE_COMMA));
+		parameterCount = avDynamicArrayGetSize(params);
+		parameters = avAllocatorAllocate(sizeof(struct FunctionParameter)*parameterCount, parser->allocator);
+		avDynamicArrayReadRange(parameters, parameterCount, 0, sizeof(struct FunctionParameter), 0, params);
+		avDynamicArrayDestroy(params);
+		if(!consume(parser,TOKEN_TYPE_PARENTHESESE_CLOSE)){
+			logSyntaxError(parser, TOKEN_TYPE_PARENTHESESE_CLOSE);
+			return INVALID_STATEMENT;
+		}
+	}
+	struct Statement stmt = {
+		.type = STATEMENT_TYPE_FUNCTION,
+		.function = {
+			.returnType = type,
+			.identifier = identifier,
+			.tagCount = functionTagCount,
+			.tags = functionTags,
+			.parameterCount = parameterCount,
+			.parameters = parameters,
+			.body = body,
+		},
+	};
+	if(match(parser, TOKEN_TYPE_SEMICOLON)){
+		body = INVALID_STATEMENT;
+	}else{
+		body = parseBody(parser);
+	}
+
+	struct Statement stmt = {
+		.type = STATEMENT_TYPE_FUNCTION,
+		.function = {
+			.returnType = type,
+			.identifier = identifier,
+			.tagCount = functionTagCount,
+			.tags = functionTags,
+			.parameterCount = parameterCount,
+			.parameters = parameters,
+			.body = body,
+		},
+	};
+	return createStatement(parser, stmt);
+}
+
+static Statement parseVariable(Parser* parser, Type type, const Token* identifier){
+	Expression value = INVALID_EXPRESSION;
+	if(match(parser, TOKEN_TYPE_EQUALS)){
+		value = parseExpression(parser);
+	}
+	if(!consume(parser, TOKEN_TYPE_SEMICOLON)){
+		logSyntaxError(parser, TOKEN_TYPE_SEMICOLON);
+		return INVALID_STATEMENT;
+	}
+	struct Statement stmt = {
+		.type = STATEMENT_TYPE_DECLARATION,
+		.declaration = {
+			.type = type,
+			.identifier = identifier,
+			.initializer = value,
+		},
+	};
+	return createStatement(parser, stmt);
+}
+
+static Statement parseDeclaration(Parser* parser){
+	Type type = parseType(parser);
+	const Token* identifier = consume(parser, TOKEN_TYPE_IDENTIFIER);
+	if(check(parser, TOKEN_TYPE_BRACE_OPEN, TOKEN_TYPE_PARENTHESESE_OPEN)){
+		return parseFunction(parser, type, identifier);	
+	}else{
+		return parseVariable(parser, type, identifier);
+	}
+
+}
+
+static Statement parseStatement(Parser* parser){
+	const Token* token;
+	if(check(parser, TOKEN_TYPE_TYPEDEF)){
+		return parseTypedefStatement(parser);
+	}
+	if((token = check(parser, TOKEN_TYPE_IDENTIFIER))){
+		if(isDefinedType(parser, token)){
+			return parseDeclaration(parser);
+		}else{
+			return parseExpressionStatement(parser);
+		}
+	}
+
+
+}
+
 bool32 parse(struct CompilerCommand command, struct TokenList input, AbstractSyntaxTree* ast){	
 
 	Parser parser = {
 		.tokens = &input,
 	};
 	avDynamicArrayCreate(0, sizeof(struct Expression), &parser.expressions);
+	avDynamicArrayCreate(0, sizeof(struct Statement), &parser.statements);
+	avDynamicArrayCreate(0, sizeof(struct Type), &parser.types);
+	avDynamicArrayCreate(0, sizeof(struct Tag), &parser.tags);
 	
 	ast->rootExpression = parseExpression(&parser);
 	ast->expressions = avCallocate(avDynamicArrayGetSize(parser.expressions), sizeof(struct Expression), "");

@@ -45,6 +45,10 @@ enum BinaryType {
 	BINARY_TYPE_GREATER_THAN_OR_EQUAL,
 	BINARY_TYPE_EQUALS,
 	BINARY_TYPE_NOT_EQUALS,
+	BINARY_TYPE_RANGE,
+	BINARY_TYPE_ASSIGN,
+	BINARY_TYPE_INC_ASSIGN,
+	BINARY_TYPE_DEC_ASSIGN,
 };
 
 struct BinaryExpression {
@@ -59,20 +63,6 @@ struct FunctionCallExpression {
 	uint32 argumentCount;
 };
 
-enum AssignmentType {
-	ASSIGNMENT_TYPE_DIRECT,
-	ASSIGNMENT_TYPE_INCREMENT,
-	ASSIGNMENT_TYPE_DECREMENT,
-	ASSIGNMENT_TYPE_MULTIPLY,
-	ASSIGNMENT_TYPE_DIVIDE,
-};
-
-struct AssignmentExpression {
-	Token* identifier;
-	enum AssignmentType type;
-	Expression value;
-};
-
 struct Expression{
 	const enum ExpressionType type;
 	const uint64 expressionStart;
@@ -82,7 +72,6 @@ struct Expression{
 		const struct UnaryExpression unary;
 		const struct BinaryExpression binary;
 		const struct FunctionCallExpression functionCall;
-		const struct AssignmentExpression assignment;
 		const Token* numeric;
 		const Token* string;
 		const Token* identifier;
@@ -91,17 +80,12 @@ struct Expression{
 
 typedef uint32 Statement;
 typedef uint32 Type;
-typedef uint32 Tag;
-
-struct Tag {
-	Token* identifier;
-	Expression* values;
-	uint32 valueCount;
-};
+typedef Expression Tag;
+typedef Statement FunctionParameter;
 
 struct Type {
-	Token* identifier;
-	Tag* tags;
+	const Token* identifier;
+	Expression* tags;
 	uint32 tagCount;
 };
 
@@ -129,26 +113,21 @@ struct IfStatement {
 
 struct TypedefStatement {
 	Type type;
-	Token* identifier;
+	const Token* identifier;
 };
 
 struct DeclarationStatement {
 	Type type;
-	Token* identifier;
+	const Token* identifier;
 	Expression initializer;
-};
-
-struct FunctionParameter {
-	Type type;
-	Token* identifier;
 };
 
 struct FunctionStatement {
 	Type returnType;
-	Token* identifier;
+	const Token* identifier;
 	Tag* tags;
 	uint32 tagCount;
-	struct FunctionParameter* parameters;
+	FunctionParameter* parameters;
 	uint32 parameterCount;
 	Statement body;
 };
@@ -177,5 +156,9 @@ struct AbstractSyntaxTree {
 bool32 parse(struct CompilerCommand command, struct TokenList input, struct AbstractSyntaxTree* ast);
 
 void printAST(struct TokenList tokens, struct AbstractSyntaxTree* ast);
+
+#define INVALID_EXPRESSION ((uint32)-1)
+#define INVALID_STATEMENT INVALID_EXPRESSION
+#define INVALID_TYPE INVALID_EXPRESSION
 
 #endif//__PARSE_H__

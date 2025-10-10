@@ -4,7 +4,7 @@
 #include <types.h>
 #include <compilerState.h>
 #include "tokenize.h"
-
+#include <AvUtils/memory/avAllocator.h>
 
 typedef uint32 Expression;
 enum ExpressionType{
@@ -146,16 +146,23 @@ struct Statement{
 	};
 };
 
-
+struct NamedType{
+	const Token* identifier;
+	struct Type type;
+};
 
 struct AbstractSyntaxTree {
 	struct Expression* expressions;
-	uint32 rootExpression;
+	struct Statement* statements;
+	struct NamedType* types;
+	Statement* rootStatements;
+	uint32 rootStatementCount;
+	AvAllocator allocator;
 };
 
 bool32 parse(struct CompilerCommand command, struct TokenList input, struct AbstractSyntaxTree* ast);
 
-void printAST(struct TokenList tokens, struct AbstractSyntaxTree* ast);
+void printAST(struct AbstractSyntaxTree* ast);
 
 #define INVALID_EXPRESSION ((uint32)-1)
 #define INVALID_STATEMENT INVALID_EXPRESSION

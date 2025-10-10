@@ -13,10 +13,10 @@ struct TokenScan {
 	uint64 length; 
 };
 
-#define TOKEN_KEYWORD(str, name, index) 	{ .text=str, .type=TOKEN_TYPE_##name, .length=sizeof(str)/sizeof(char)},
-#define TOKEN_PUNCTUATOR(str, name, index) 	{ .text=str, .type=TOKEN_TYPE_##name, .length=sizeof(str)/sizeof(char)},
-#define TOKEN_LITERAL(str, name, index)		{ .text=str, .type=TOKEN_TYPE_##name, .length=sizeof(str)/sizeof(char)},
-#define TOKEN_IDENTIFIER(str, name, index) 	{ .text=str, .type=TOKEN_TYPE_##name, .length=sizeof(str)/sizeof(char)},
+#define TOKEN_KEYWORD(str, name, index) 	{ .text=str, .type=TOKEN_TYPE_##name, .length=sizeof(str)/sizeof(char)-1},
+#define TOKEN_PUNCTUATOR(str, name, index) 	{ .text=str, .type=TOKEN_TYPE_##name, .length=sizeof(str)/sizeof(char)-1},
+#define TOKEN_LITERAL(str, name, index)		{ .text=str, .type=TOKEN_TYPE_##name, .length=sizeof(str)/sizeof(char)-1},
+#define TOKEN_IDENTIFIER(str, name, index) 	{ .text=str, .type=TOKEN_TYPE_##name, .length=sizeof(str)/sizeof(char)-1},
 
 static const struct TokenScan tokenList[] = {
 	TOKEN_LIST
@@ -262,7 +262,7 @@ bool32 tokenize(struct CompilerCommand command, struct StringBuffer input, struc
 						if((tokenList[i].type & TOKEN_TYPE_KEYWORD) == 0){
 							continue;
 						}
-						uint64 length = start-current;
+						uint64 length = current-start;
 						if(length != tokenList[i].length){
 							continue;
 						}

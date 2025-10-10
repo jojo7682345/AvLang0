@@ -60,7 +60,11 @@ static const struct Token* _scan(Parser* input, bool32 advance, enum TokenType t
 
 #define logSyntaxError(parser, ...) _logSyntaxError(parser, __VA_ARGS__ __VA_OPT__(,) TOKEN_TYPE_NONE)
 void _logSyntaxError(Parser* parser,...){
-
+	avLog(AV_INVALID_SYNTAX, "Syntax Erorr");	
+}
+#define logSemanticError(parser, ...) _logSemanticError(parser, __VA_ARGS__ __VA_OPT__(,) NULL)
+void _logSemanticError(Parser* parser, ...){
+	avLog(AV_ALREADY_EXISTS, "Semantic Error");
 }
 
 uint64 getTokenStart(const Token* const token){
@@ -384,15 +388,57 @@ static Expression parseAssignment(Parser* parser){
 }
 
 static Expression parseExpression(Parser* parser){
-	return parseComparison(parser);
+	return parseAssignment(parser);
+}
+
+
+static bool32 tokensEqual(const Token* tokenA, const Token* tokenB){
+	if(!(tokenA && tokenB)){
+		return false;
+	}
+	if(tokenA->text.length != tokenB->text.length){
+		return false;
+	}
+	for(uint64 i = 0; i < tokenA->text.length; i++){
+		if(tokenA->text.start[i]!=tokenB->text.start[i]){
+			return false;
+		}
+	}
+	return true;
+}
+
+#define UNDEFINED_TYPE INVALID_TYPE
+static Type getNamedType(Parser* parser, const Token* identifier){
+	avDynamicArrayForEachElement(struct NamedType, parser->types,{
+		if(tokensEqual(element.identifier, identifier)){
+			return index;
+		}
+	});
+	return UNDEFINED_TYPE;
 }
 
 static Type createNamedType(Parser* parser, struct Type type, const Token* identifier){
-
+	if(identifier != NULL && getNamedType(parser, identifier)!=UNDEFINED_TYPE){
+		logSemanticError(parser, identifier);
+		return INVALID_TYPE;
+	}
+	struct NamedType index = {
+		.identifier = identifier,
+		.type = type,
+	};
+	return avDynamicArrayAdd(&index, parser->types);
 }
 
 static Type createType(Parser* parser, struct Type type){
 	return createNamedType(parser, type, NULL);
+}
+
+static bool32 nameType(Parser* parser, Type type, const Token* identifier){
+	if(getNamedType(parser, identifier)!=UNDEFINED_TYPE){
+		logSemanticError(parser, identifier);
+		return false;
+	}
+	avDynamicArrayAccess(struct NamedType, type, parser->types)->identifier = identifier;
 }
 
 static void parseTags(Parser* parser, AvDynamicArray tags);
@@ -404,14 +450,21 @@ static Type parseType(Parser* parser){
 	}
 	uint32 tagCount = 0;
 	Tag* tags = NULL;
-	AvDynamicArray tagsArr = AV_EMPTY;
-	avDynamicArrayCreate(0, sizeof(Tag),&tagsArr);
-	parseTags(parser, tagsArr);
-	if(tagCount){
-		tags = avAllocatorAllocate(sizeof(Tag)*tagCount, parser->allocator);
-		avDynamicArrayReadRange(tags, tagCount, 0, sizeof(Tag), 0, tagsArr);
+	if(match(parser, TOKEN_TYPE_BRACE_OPEN)){
+		AvDynamicArray tagsArr = AV_EMPTY;
+		avDynamicArrayCreate(0, sizeof(Tag),&tagsArr);
+		parseTags(parser, tagsArr);
+		if(!consume(parser, TOKEN_TYPE_BRACE_CLOSE)){
+			logSyntaxError(parser, TOKEN_TYPE_BRACE_CLOSE);
+			return INVALID_STATEMENT;
+		}
+		tagCount = avDynamicArrayGetSize(tagsArr);
+		if(tagCount){
+			tags = avAllocatorAllocate(sizeof(Tag)*tagCount, parser->allocator);
+			avDynamicArrayReadRange(tags, tagCount, 0, sizeof(Tag), 0, tagsArr);
+		}
+		avDynamicArrayDestroy(tagsArr);
 	}
-	avDynamicArrayDestroy(tagsArr);
 	struct Type type = {
 		.identifier = baseType,
 		.tagCount = tagCount,
@@ -426,6 +479,9 @@ static void parseTags(Parser* parser, AvDynamicArray tags){
 			break;
 		}
 		Expression expression = parseAssignment(parser);
+		if(expression==INVALID_EXPRESSION){
+			continue;
+		}
 		avDynamicArrayAdd(&expression, tags);	
 	}while(match(parser, TOKEN_TYPE_SEMICOLON));
 }
@@ -442,6 +498,39 @@ static void parseFunctionParameters(Parser* parser, AvDynamicArray params){
 		Statement param = parseVariable(parser, type, identifier);
 		avDynamicArrayAdd(&param, params);
 	}while(match(parser, TOKEN_TYPE_COMMA));
+}
+static Statement parseStatement(Parser* parser);
+static Statement parseBody(Parser* parser){
+	if(!match(parser, TOKEN_TYPE_BRACE_OPEN)){
+		return parseStatement(parser);
+	}
+	uint32 statementCount = 0;
+	Statement* statements = NULL;
+	AvDynamicArray stmts;
+	avDynamicArrayCreate(0, sizeof(Statement), &stmts);
+	
+	while(!match(parser, TOKEN_TYPE_BRACE_CLOSE)){
+		Statement statement = parseStatement(parser);
+		if(statement != INVALID_STATEMENT){
+			avDynamicArrayAdd(&statement, stmts);
+		}
+	}
+
+	statementCount = avDynamicArrayGetSize(stmts);
+	if(statementCount){
+		statements = avAllocatorAllocate(sizeof(Statement)*statementCount, parser->allocator);
+		avDynamicArrayReadRange(statements, statementCount, 0, sizeof(Statement), 0, stmts);
+	}
+	avDynamicArrayDestroy(stmts);
+
+	struct Statement statement = {
+		.type = STATEMENT_TYPE_BLOCK,
+		.block = {
+			.statements = statements,
+			.statementCount = statementCount,
+		},
+	};
+	return createStatement(parser, statement);
 }
 
 static Statement parseFunction(Parser* parser, Type type, const Token* identifier){
@@ -466,20 +555,23 @@ static Statement parseFunction(Parser* parser, Type type, const Token* identifie
 		}
 	}
 	if(!consume(parser, TOKEN_TYPE_PARENTHESESE_OPEN)){
-		AvDynamicArray params = AV_EMPTY;
-		avDynamicArrayCreate(0, sizeof(FunctionParameter), &params);
-		parseFunctionParameters(parser, params);
-		parameterCount = avDynamicArrayGetSize(params);
-		if(parameterCount){
-			parameters = avAllocatorAllocate(sizeof(FunctionParameter)*parameterCount, parser->allocator);
-			avDynamicArrayReadRange(parameters, parameterCount, 0, sizeof(FunctionParameter), 0, params);
-		}
-		avDynamicArrayDestroy(params);
-		if(!consume(parser,TOKEN_TYPE_PARENTHESESE_CLOSE)){
-			logSyntaxError(parser, TOKEN_TYPE_PARENTHESESE_CLOSE);
-			return INVALID_STATEMENT;
-		}
+		logSyntaxError(parser, TOKEN_TYPE_PARENTHESESE_OPEN);
+		return INVALID_STATEMENT;
 	}
+	AvDynamicArray params = AV_EMPTY;
+	avDynamicArrayCreate(0, sizeof(FunctionParameter), &params);
+	parseFunctionParameters(parser, params);
+	parameterCount = avDynamicArrayGetSize(params);
+	if(parameterCount){
+		parameters = avAllocatorAllocate(sizeof(FunctionParameter)*parameterCount, parser->allocator);
+		avDynamicArrayReadRange(parameters, parameterCount, 0, sizeof(FunctionParameter), 0, params);
+	}
+	avDynamicArrayDestroy(params);
+	if(!consume(parser,TOKEN_TYPE_PARENTHESESE_CLOSE)){
+		logSyntaxError(parser, TOKEN_TYPE_PARENTHESESE_CLOSE);
+		return INVALID_STATEMENT;
+	}
+	
 	if(match(parser, TOKEN_TYPE_SEMICOLON)){
 		body = INVALID_STATEMENT;
 	}else{
@@ -545,7 +637,7 @@ static Statement parseTypedef(Parser* parser){
 		consumeUpToAndIncluding(parser,TOKEN_TYPE_SEMICOLON);
 		return INVALID_STATEMENT;
 	}
-	if(!consume(parser, TOKEN_TYPE_IDENTIFIER)){
+	if(!consume(parser, TOKEN_TYPE_SEMICOLON)){
 		logSyntaxError(parser, TOKEN_TYPE_SEMICOLON);
 		return INVALID_STATEMENT;
 	}
@@ -556,6 +648,7 @@ static Statement parseTypedef(Parser* parser){
 			.identifier = identifier,
 		},
 	};
+	nameType(parser, type, identifier);
 	return createStatement(parser, stmt);
 }
 
@@ -566,11 +659,27 @@ static Statement parseExpressionStatement(Parser* parser){
 	}
 	if(!consume(parser, TOKEN_TYPE_SEMICOLON)){
 		logSyntaxError(parser, TOKEN_TYPE_SEMICOLON);
-		return INVALID_EXPRESSION;
+		return INVALID_STATEMENT;
 	}
 	struct Statement stmt = {
 		.type = STATEMENT_TYPE_EXPRESSION,
 		.expression = expression,
+	};
+	return createStatement(parser, stmt);
+}
+
+static Statement parseReturnStatement(Parser* parser){
+	Expression value = INVALID_EXPRESSION;
+	if(!check(parser, TOKEN_TYPE_SEMICOLON)){
+		value = parseExpression(parser);
+	}
+	if(!consume(parser, TOKEN_TYPE_SEMICOLON)){
+		logSyntaxError(parser, TOKEN_TYPE_SEMICOLON);
+		return INVALID_STATEMENT;
+	}
+	struct Statement stmt = {
+		.type = STATEMENT_TYPE_RETURN,
+		.expression = value,
 	};
 	return createStatement(parser, stmt);
 }
@@ -581,28 +690,74 @@ static Statement parseStatement(Parser* parser){
 		return parseTypedef(parser);
 	}
 	if((token = check(parser, TOKEN_TYPE_IDENTIFIER))){
-		if(isNamedType(parser, token)){
+		if(getNamedType(parser, token)!=UNDEFINED_TYPE){
 			return parseDeclaration(parser);
 		}else{
 			return parseExpressionStatement(parser);
 		}
 	}
+	if(match(parser, TOKEN_TYPE_RETURN)){
+		return parseReturnStatement(parser);
+	}
+	return parseExpressionStatement(parser);
+}
 
-
+static void parseStatements(Parser* parser, AvDynamicArray statementList){
+	while(parser->tokens->currentToken < parser->tokens->tokenCount){
+		Statement statement = parseStatement(parser);
+		if(statement == INVALID_STATEMENT){
+			continue;
+		}
+		avDynamicArrayAdd(&statement, statementList);
+	}
 }
 
 bool32 parse(struct CompilerCommand command, struct TokenList input, AbstractSyntaxTree* ast){	
+	bool32 success = true;
 
+	AvAllocator allocator = AV_EMPTY;
 	Parser parser = {
 		.tokens = &input,
+		.allocator = &ast->allocator,
 	};
 	avDynamicArrayCreate(0, sizeof(struct Expression), &parser.expressions);
 	avDynamicArrayCreate(0, sizeof(struct Statement), &parser.statements);
-	avDynamicArrayCreate(0, sizeof(struct Type), &parser.types);
+	avDynamicArrayCreate(0, sizeof(struct NamedType), &parser.types);
+	avAllocatorCreate(0, AV_ALLOCATOR_TYPE_DYNAMIC, parser.allocator);
+
+
+	AvDynamicArray rootStatements;
+	avDynamicArrayCreate(0, sizeof(Statement), &rootStatements);
+	parseStatements(&parser, rootStatements);
+	uint32 rootStatementCount = avDynamicArrayGetSize(rootStatements);
+	if(!rootStatementCount){
+		success = false;
+		goto exitParse;
+	}
 	
-	ast->rootExpression = parseExpression(&parser);
-	ast->expressions = avCallocate(avDynamicArrayGetSize(parser.expressions), sizeof(struct Expression), "");
-	avDynamicArrayReadRange(ast->expressions, avDynamicArrayGetSize(parser.expressions), 0, sizeof(struct Expression), 0, parser.expressions);
+	ast->rootStatements = avCallocate(rootStatementCount, sizeof(Statement), "");
+	avDynamicArrayReadRange(ast->rootStatements, rootStatementCount, 0, sizeof(Statement), 0, rootStatements);
+	ast->rootStatementCount = rootStatementCount;
+
+	uint32 statementCount = avDynamicArrayGetSize(parser.statements);
+	ast->statements = avCallocate(statementCount, sizeof(struct Statement), "");
+	avDynamicArrayReadRange(ast->statements, statementCount, 0, sizeof(struct Statement), 0, parser.statements);
+
+	uint32 typeCount = avDynamicArrayGetSize(parser.types);
+	if(typeCount){
+		ast->types = avCallocate(typeCount, sizeof(struct NamedType), "");
+		avDynamicArrayReadRange(ast->types, typeCount, 0, sizeof(struct NamedType), 0, parser.types);
+	}
+	uint32 expressionCount = avDynamicArrayGetSize(parser.expressions);
+	if(expressionCount){
+		ast->expressions = avCallocate(expressionCount, sizeof(struct Expression), "");
+		avDynamicArrayReadRange(ast->expressions, expressionCount, 0, sizeof(struct Expression), 0, parser.expressions);
+	}
+exitParse:
+	avDynamicArrayDestroy(rootStatements);
+	avDynamicArrayDestroy(parser.expressions);
+	avDynamicArrayDestroy(parser.statements);
+	avDynamicArrayDestroy(parser.types);
 	return true;
 }
 // Helper for indentation
@@ -666,8 +821,132 @@ static void printExpression(struct Expression* expressions, Expression index, in
     }
 }
 
-void printAST(struct TokenList tokens, AbstractSyntaxTree* ast) {
+void printType(AbstractSyntaxTree* ast, Type typeHandle, int indentLevel){
+	struct NamedType type = ast->types[typeHandle];
+	printIndent(indentLevel);
+	printf("Base: %.*s\n", (int)type.type.identifier->text.length, type.type.identifier->text.start);
+	if(type.type.tagCount){
+		printIndent(indentLevel);
+		printf("Tags: [\n");
+		for(uint32 i = 0; i < type.type.tagCount; i++){
+			printExpression(ast->expressions, type.type.tags[i], indentLevel+1);
+		}
+		printIndent(indentLevel);
+		printf("]\n");
+	}
+}
+
+void printStatement(AbstractSyntaxTree* ast, Statement handle, int indentLevel){
+	struct Statement statement = ast->statements[handle];
+
+	printIndent(indentLevel);
+	switch(statement.type){
+		case STATEMENT_TYPE_TYPEDEF:
+			printf("Typedef: {\n");
+			printIndent(indentLevel+1);
+			printf("Type: {\n");
+			printType(ast, statement.typeDefine.type, indentLevel+2);
+			printIndent(indentLevel+1);
+			printf("}\n");
+			printIndent(indentLevel+1);
+			printf("Name: {\n");
+			printIndent(indentLevel+2);
+			printf("%.*s\n", (int)statement.typeDefine.identifier->text.length, statement.typeDefine.identifier->text.start );
+			printIndent(indentLevel+1);
+			printf("}\n");
+			printIndent(indentLevel);
+			printf("}\n");
+			break;
+		case STATEMENT_TYPE_FUNCTION:
+			printf("Function: {\n");
+			printIndent(indentLevel+1);
+			printf("Name: {\n");
+			printIndent(indentLevel+2);
+			printf("%.*s\n", (int)statement.function.identifier->text.length, statement.function.identifier->text.start );
+			if(statement.function.parameterCount){
+				printIndent(indentLevel+1);
+				printf("Parameters: [\n");
+				for(uint32 i = 0; i < statement.function.parameterCount; i++){
+					printStatement(ast, statement.function.parameters[i], indentLevel+2);
+				}
+				printIndent(indentLevel+1);
+				printf("]\n");
+			}
+			printIndent(indentLevel+1);
+			printf("ReturnType: {\n");
+			printType(ast, statement.function.returnType, indentLevel+2);
+			printIndent(indentLevel+1);
+			printf("}\n");
+			if(statement.function.tagCount){
+				printIndent(indentLevel+1);
+				printf("Tags: [\n");
+				for(uint32 i = 0; i < statement.function.tagCount; i++){
+					printExpression(ast->expressions, statement.function.tags[i], indentLevel+2);
+				}
+				printIndent(indentLevel+1);
+				printf("]\n");
+			}
+			printIndent(indentLevel+1);
+			printf("Body: {\n");
+			printStatement(ast, statement.function.body, indentLevel+2);
+			printIndent(indentLevel+1);
+			printf("}\n");
+			printIndent(indentLevel);
+			printf("}\n");
+			break;
+		case STATEMENT_TYPE_RETURN:
+			printf("Return: {\n");
+			printExpression(ast->expressions, statement.expression, indentLevel+1);
+			printIndent(indentLevel);
+			printf("}\n");
+			break;
+		case STATEMENT_TYPE_BLOCK:
+			printf("Statements: [\n");
+			for(uint32 i = 0; i < statement.block.statementCount; i++){
+				printStatement(ast, statement.block.statements[i], indentLevel+1);
+			}
+			printIndent(indentLevel);
+			printf("]\n");
+			break;
+		case STATEMENT_TYPE_DECLARATION:
+			printf("Declaration: {\n");
+			printIndent(indentLevel+1);
+			printf("Type: {\n");
+			printType(ast, statement.declaration.type, indentLevel+2);
+			printIndent(indentLevel+1);
+			printf("}\n");
+			printIndent(indentLevel+1);
+			printf("Name: {\n");
+			printIndent(indentLevel+2);
+			printf("%.*s\n", (int)statement.declaration.identifier->text.length, statement.declaration.identifier->text.start);
+			printIndent(indentLevel+1);
+			printf("}\n");
+			if(statement.declaration.initializer!=INVALID_EXPRESSION){
+				printIndent(indentLevel+1);
+				printf("Value: {\n");
+				printExpression(ast->expressions, statement.declaration.initializer, indentLevel+2);
+				printIndent(indentLevel+1);
+				printf("}\n");
+			}
+			printIndent(indentLevel);
+			printf("}\n");
+			break;
+		case STATEMENT_TYPE_EXPRESSION:
+			printf("Expression: {\n");
+			printExpression(ast->expressions, statement.expression, indentLevel+1);
+			printIndent(indentLevel);
+			printf("}\n");
+			break;
+		default:
+			printf("Unknown Statement Type(%d)\n", statement.type);
+			break;
+	}
+}
+
+void printAST(AbstractSyntaxTree* ast) {
     printf("=== Abstract Syntax Tree ===\n");
-    printExpression(ast->expressions, ast->rootExpression, 0);
+    for(uint32 i = 0; i < ast->rootStatementCount; i++){
+		printStatement(ast, ast->rootStatements[i], 0);
+	}
 }
 

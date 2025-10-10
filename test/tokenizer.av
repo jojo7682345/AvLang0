@@ -3,5 +3,6 @@
 typedef int{range=0..100;} percent;
 
 percent func{pure;}(percent a, percent b){
+	a += 43;
 	return a + b;
 }

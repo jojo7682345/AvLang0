@@ -83,6 +83,24 @@ typedef uint32 Type;
 typedef Expression Tag;
 typedef Statement FunctionParameter;
 
+enum SymbolType {
+	SYMBOL_TYPE_NONE,
+	SYMBOL_TYPE_TYPE,
+	SYMBOL_TYPE_FUNCTION,
+	SYMBOL_TYPE_VARIABLE,
+};
+struct Symbol {
+	enum SymbolType type;
+	const Token* identifier;
+};
+
+struct SymbolScope {
+	AvDynamicArray symbols;
+	struct SymbolScope* parent;
+};
+
+
+
 struct Type {
 	const Token* identifier;
 	Expression* tags;
@@ -103,6 +121,7 @@ enum StatementType {
 struct BlockStatement {
 	Statement* statements;
 	uint32 statementCount;
+	struct SymbolScope* scope;
 };
 
 struct IfStatement {
@@ -130,6 +149,7 @@ struct FunctionStatement {
 	FunctionParameter* parameters;
 	uint32 parameterCount;
 	Statement body;
+	struct SymbolScope* scope;
 };
 
 struct Statement{

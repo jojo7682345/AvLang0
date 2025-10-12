@@ -10,6 +10,7 @@ linker = "gcc";
 flags=[
 	"-Og",
     "-ggdb",
+    "-O0",
     compileString("-DPROJECT_NAME=\"$PROJECT_NAME\""),
 	compileString("$#NIX_CFLAGS_COMPILE"),
 ];

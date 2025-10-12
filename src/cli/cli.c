@@ -92,6 +92,17 @@ struct CompilerCommandStatusFlags parseVerbosityLevelDebug(struct Arguments* arg
 	return status;
 }
 
+struct CompilerCommandStatusFlags parseDebugParse(struct Arguments* args, struct CompilerCommand* command, struct ParseFlags* parseFlags){
+	struct CompilerCommandStatusFlags status = {0};
+	if(command->flags.stageDebugFlags.parse){
+		status.warnings.multipleDebugStagesSpecified = 1;
+		return status;
+	}
+	command->flags.stageDebugFlags.parse = 1;
+	return status;
+}
+
+
 struct CompilerCommandStatusFlags parseDebugTokenize(struct Arguments* args, struct CompilerCommand* command, struct ParseFlags* parseFlags){
 	struct CompilerCommandStatusFlags status = {0};
 	if(command->flags.stageDebugFlags.tokenize){
@@ -170,6 +181,7 @@ const struct CompilerFlag{
 	{.parse=parseVerbosityLevelDebug,	.shortName=NULL,.longName="v-debug",	.usage=NULL,		.description = "Prints debug messages"},
 	{.parse=parseDebugLoad,				.shortName=NULL,.longName="d-load",		.usage=NULL,		.description = "disable load stage messages"},
 	{.parse=parseDebugTokenize,			.shortName=NULL,.longName="d-tokenize",	.usage=NULL,		.description = "disable tokenize stage messages"},
+	{.parse=parseDebugParse,			.shortName=NULL,.longName="d-parse", 	.usage=NULL,		.description = "disable parsing stage messages"},
 	{.parse=parseHelpFlag,				.shortName="h",	.longName="help",		.usage=NULL,		.description = "prints this help menu"},
 };
 const uint32 flagCount = sizeof(flags)/sizeof(struct CompilerFlag);
@@ -296,7 +308,9 @@ struct CompilerCommandStatusFlags parseArgument(struct Arguments* args, struct C
 		return flags[flagIndex].parse(args, command, parseFlags);
 	}
 
-	avLog(AV_ERROR, "What happend?");
+	avLog(AV_ERROR, "Unknown Argument");
+	status.errors.unrecognizedFlag = 1;
+	return status;
 }
 
 

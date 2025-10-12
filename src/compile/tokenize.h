@@ -102,5 +102,5 @@ struct TokenList {
 bool32 tokenize(struct CompilerCommand command, struct StringBuffer input, struct TokenList* tokens);
 
 void printTokens(struct TokenList tokens);
-
+void printToken(Token token);
 #endif//__TOKENIZE_H__

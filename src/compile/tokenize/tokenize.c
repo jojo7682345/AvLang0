@@ -331,30 +331,32 @@ static const char* tokenNames[] = {
 #undef TOKEN_LITERAL
 #undef TOKEN_IDENTIFIER
 
+void printToken(Token token){
+	char lineStr[128] = {0};
+	char lengthStr[128] = {0};
+	const char* typeStr = tokenNames[(sizeof(tokenNames)/sizeof(const char*)-1)];
+	char tokStr[128] = {0};
+	sprintf(lineStr, "%lu", token.position.line);
+	sprintf(lengthStr, "%lu", token.text.length);
+	for(uint32 j = 0; j < sizeof(tokenList)/sizeof(struct TokenScan); j++){
+		if(tokenList[j].type == token.type){
+			typeStr = tokenNames[j];
+			break;
+		}
+		if(token.type & TOKEN_TYPE_IDENTIFIER){
+			typeStr = tokenNames[(sizeof(tokenNames)/sizeof(const char*)-2)];
+			break;
+		}
+	}
+	memcpy(tokStr, token.text.start, min(127, token.text.length));
+	avLog(AV_DEBUG, "Token:\n\tLine: ", lineStr, "\n\tLength: ", lengthStr, "\n\tType: ", typeStr, "\n\tValue: ", tokStr);
+}
+
 void printTokens(struct TokenList tokens){
 
 	for(uint64 i = 0; i < tokens.tokenCount; i++){
 		Token token = tokens.tokens[i];
-		char lineStr[128] = {0};
-		char lengthStr[128] = {0};
-		const char* typeStr = tokenNames[(sizeof(tokenNames)/sizeof(const char*)-1)];
-		char tokStr[128] = {0};
-		sprintf(lineStr, "%lu", token.position.line);
-		sprintf(lengthStr, "%lu", token.text.length);
-		for(uint32 j = 0; j < sizeof(tokenList)/sizeof(struct TokenScan); j++){
-			if(tokenList[j].type == token.type){
-				typeStr = tokenNames[j];
-				break;
-			}
-			if(token.type & TOKEN_TYPE_IDENTIFIER){
-				typeStr = tokenNames[(sizeof(tokenNames)/sizeof(const char*)-2)];
-				break;
-			}
-		}
-		memcpy(tokStr, token.text.start, min(127, token.text.length));
-		avLog(AV_DEBUG, "Token:\n\tLine: ", lineStr, "\n\tLength: ", lengthStr, "\n\tType: ", typeStr, "\n\tValue: ", tokStr);
-
+		printToken(token);
 	}
-
 
 }

@@ -106,6 +106,7 @@ extern const uint32 defaultDisabledCategoryCount;
 
 void avLog_(AvResult result, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, const char* msg, ...);
 void avAssert_(AvResult result, AvResult valid, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, const char* msg, ...);
+void avLogF_(AvResult result, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, const char* format, ...);
 
 #ifndef AV_LOG_CATEGORY
 #define AV_LOG_CATEGORY "misc"
@@ -114,9 +115,11 @@ void avAssert_(AvResult result, AvResult valid, AV_LOCATION_ARGS, AV_CATEGORY_AR
 #ifndef NDEBUG
 #define avLog(result, message, ...) avLog_(result,AV_LOCATION_PARAMS, AV_LOG_CATEGORY, message, __VA_ARGS__ __VA_OPT__(,) 0)
 #define avAssert(result, valid, message, ...) avAssert_(result,valid,AV_LOCATION_PARAMS, AV_LOG_CATEGORY, message, __VA_ARGS__ __VA_OPT__(,) 0)
+#define avLogF(result, format, ...) avLogF_(result, AV_LOCATION_PARAMS, AV_LOG_CATEGORY, format __VA_OPT__(,) __VA_ARGS__)
 #else 
 #define avLog(result,message,...) ((void)(result))
 #define avAssert(result,valid,message,...) ((void)(result))
+#define avLogF(result, format, ...) ((void)(result))
 #endif
 
 typedef struct AvLogSettings {

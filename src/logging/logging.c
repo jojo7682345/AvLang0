@@ -341,9 +341,7 @@ void printTags(AvResult result, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, bool32 print
 		fprintf(stdout, " -> ");
 	}
 }
-
-void avLog_(AvResult result, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, const char* msg, ...) {
-
+void avLog_v(AvResult result, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, const char* msg, uint32 argCount, va_list args){
 	if (checkCategoryDisabled(category, result) || checkMessageDisabled(result)) {
 		return;
 	}
@@ -353,7 +351,20 @@ void avLog_(AvResult result, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, const char* msg
 	}
 
 	bool32 printArrow = true;
+	if(argCount == 0 && (msg==0 || strcmp(msg, "")==0)){
+		printArrow = false;
+	}
+	printTags(result, line, file, func, category, printArrow);
 
+	fprintf(stdout, "%s", msg);
+
+	const char* str;
+	while((str = va_arg(args, const char*))!=nullptr){
+		fprintf(stdout, "%s", str);
+	}
+	fprintf(stdout, "\n");
+}
+void avLog_(AvResult result, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, const char* msg, ...) {
 	va_list args;
 	va_start(args, msg);
 
@@ -362,20 +373,21 @@ void avLog_(AvResult result, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, const char* msg
 		argCount++;
 	}
 	va_end(args);
-	if(argCount == 0 && (msg==0 || strcmp(msg, "")==0)){
-		printArrow = false;
-	}
-	printTags(result, line, file, func, category, printArrow);
-
-	fprintf(stdout, "%s", msg);
-
 	va_start(args, msg);
-	const char* str;
-	while((str = va_arg(args, const char*))!=nullptr){
-		fprintf(stdout, "%s", str);
-	}
+
+	avLog_v(result, line, file, func, category, msg, argCount, args);
+
 	va_end(args);
-	fprintf(stdout, "\n");
+}
+
+void avLogF_(AvResult result, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, const char* format, ...){
+	va_list args;
+	va_start(args, format);
+	char buffer[512];
+	vsnprintf(buffer, sizeof(buffer)-1, format, args);
+	buffer[511] = 0;
+	avLog_(result, line, file, func, category, buffer, 0);
+	va_end(args);
 }
 
 void avAssert_(AvResult result, AvResult valid, AV_LOCATION_ARGS, AV_CATEGORY_ARGS, const char* msg, ...) {

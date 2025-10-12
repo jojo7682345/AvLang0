@@ -18,13 +18,17 @@
 
 
 typedef struct AbstractSyntaxTree AbstractSyntaxTree;
+
+
+
 typedef struct Parser {
 	struct TokenList* tokens;
 	AvDynamicArray expressions;
 	AvDynamicArray statements;
 	AvDynamicArray types;
-	AvDynamicArray tags;
 	AvAllocator* allocator;
+	struct SymbolScope* topLevelScope;
+	struct SymbolScope* currentScope;
 }Parser;
 
 
@@ -60,6 +64,7 @@ static const struct Token* _scan(Parser* input, bool32 advance, enum TokenType t
 
 #define logSyntaxError(parser, ...) _logSyntaxError(parser, __VA_ARGS__ __VA_OPT__(,) TOKEN_TYPE_NONE)
 void _logSyntaxError(Parser* parser,...){
+	avLogF(AV_INVALID_SYNTAX, "Token: %.*s", parser->tokens->tokens[parser->tokens->currentToken].text.length, parser->tokens->tokens[parser->tokens->currentToken].text.start);
 	avLog(AV_INVALID_SYNTAX, "Syntax Erorr");	
 }
 #define logSemanticError(parser, ...) _logSemanticError(parser, __VA_ARGS__ __VA_OPT__(,) NULL)
@@ -408,17 +413,42 @@ static bool32 tokensEqual(const Token* tokenA, const Token* tokenB){
 }
 
 #define UNDEFINED_TYPE INVALID_TYPE
-static Type getNamedType(Parser* parser, const Token* identifier){
-	avDynamicArrayForEachElement(struct NamedType, parser->types,{
-		if(tokensEqual(element.identifier, identifier)){
-			return index;
-		}
-	});
-	return UNDEFINED_TYPE;
+
+
+static enum SymbolType getSymbol(Parser* parser, const Token* identifier){
+	struct SymbolScope* scope = parser->currentScope;
+	while(scope != NULL){
+		for(uint32 index = 0; index < avDynamicArrayGetSize(scope->symbols); index++) { 
+			struct Symbol element; 
+			avDynamicArrayRead(&element, index, (scope->symbols)); 
+			{ 
+				if(tokensEqual(identifier, element.identifier)){ 
+					return element.type; 
+				} 
+			} 
+		};
+		scope = scope->parent;
+	}
+	return SYMBOL_TYPE_NONE;
+}
+
+static bool8 addSymbolToScope(Parser* parser, enum SymbolType type, const Token* identifier){
+	if(getSymbol(parser, identifier)!=SYMBOL_TYPE_NONE){
+		return false;
+	}
+
+	struct SymbolScope* scope = parser->currentScope;
+	struct Symbol symbol = {
+		.identifier = identifier,
+		.type = type,
+	};
+	avDynamicArrayAdd(&symbol, scope->symbols);
+
+	return true;
 }
 
 static Type createNamedType(Parser* parser, struct Type type, const Token* identifier){
-	if(identifier != NULL && getNamedType(parser, identifier)!=UNDEFINED_TYPE){
+	if(identifier != NULL && addSymbolToScope(parser, SYMBOL_TYPE_TYPE, identifier)){
 		logSemanticError(parser, identifier);
 		return INVALID_TYPE;
 	}
@@ -434,7 +464,7 @@ static Type createType(Parser* parser, struct Type type){
 }
 
 static bool32 nameType(Parser* parser, Type type, const Token* identifier){
-	if(getNamedType(parser, identifier)!=UNDEFINED_TYPE){
+	if(!addSymbolToScope(parser, SYMBOL_TYPE_TYPE, identifier)){
 		logSemanticError(parser, identifier);
 		return false;
 	}
@@ -533,6 +563,23 @@ static Statement parseBody(Parser* parser){
 	return createStatement(parser, statement);
 }
 
+struct SymbolScope* enterScope(Parser* parser){
+	struct SymbolScope* scope = avAllocatorAllocate(sizeof(struct SymbolScope), parser->allocator);
+	scope->parent = parser->currentScope;
+	avDynamicArrayCreate(0, sizeof(struct Symbol), &scope->symbols);
+	parser->currentScope = scope;
+	return scope;
+}
+
+void exitScope(Parser* parser){
+	if(parser->currentScope==NULL){
+		avAssert(parser->currentScope!=NULL, AV_ERROR, "scope is null");
+		return;
+	}
+	struct SymbolScope* scope = parser->currentScope;
+	parser->currentScope = scope->parent;
+}
+
 static Statement parseFunction(Parser* parser, Type type, const Token* identifier){
 	uint32 functionTagCount = 0;
 	Tag* functionTags = nullptr;
@@ -575,7 +622,9 @@ static Statement parseFunction(Parser* parser, Type type, const Token* identifie
 	if(match(parser, TOKEN_TYPE_SEMICOLON)){
 		body = INVALID_STATEMENT;
 	}else{
+		enterScope(parser);
 		body = parseBody(parser);
+		exitScope(parser);
 	}
 
 	struct Statement stmt = {
@@ -690,7 +739,8 @@ static Statement parseStatement(Parser* parser){
 		return parseTypedef(parser);
 	}
 	if((token = check(parser, TOKEN_TYPE_IDENTIFIER))){
-		if(getNamedType(parser, token)!=UNDEFINED_TYPE){
+		enum SymbolType type = getSymbol(parser, token);
+		if(type == SYMBOL_TYPE_TYPE){
 			return parseDeclaration(parser);
 		}else{
 			return parseExpressionStatement(parser);
@@ -728,7 +778,12 @@ bool32 parse(struct CompilerCommand command, struct TokenList input, AbstractSyn
 
 	AvDynamicArray rootStatements;
 	avDynamicArrayCreate(0, sizeof(Statement), &rootStatements);
+
+	enterScope(&parser);
 	parseStatements(&parser, rootStatements);
+	exitScope(&parser);
+	avAssert(parser.currentScope==NULL, AV_ERROR, "Scope inbalance");
+	
 	uint32 rootStatementCount = avDynamicArrayGetSize(rootStatements);
 	if(!rootStatementCount){
 		success = false;
@@ -753,6 +808,8 @@ bool32 parse(struct CompilerCommand command, struct TokenList input, AbstractSyn
 		ast->expressions = avCallocate(expressionCount, sizeof(struct Expression), "");
 		avDynamicArrayReadRange(ast->expressions, expressionCount, 0, sizeof(struct Expression), 0, parser.expressions);
 	}
+
+	printAST(ast);
 exitParse:
 	avDynamicArrayDestroy(rootStatements);
 	avDynamicArrayDestroy(parser.expressions);
@@ -763,7 +820,7 @@ exitParse:
 // Helper for indentation
 static void printIndent(int level) {
     for (int i = 0; i < level; ++i) {
-        printf("  ");
+        avLogF(AV_DEBUG,"  ");
     }
 }
 
@@ -772,51 +829,51 @@ static void printExpression(struct Expression* expressions, Expression index, in
     struct Expression* expr = expressions + index;
     if (!expr) {
         printIndent(indentLevel);
-        printf("<invalid expression>\n");
+        avLogF(AV_DEBUG,"<invalid expression>\n");
         return;
     }
 
     printIndent(indentLevel);
     switch (expr->type) {
         case EXPRESSION_TYPE_NUMBER_LITERAL:
-            printf("NumberLiteral: %.*s\n",
+            avLogF(AV_DEBUG,"NumberLiteral: %.*s\n",
                 (int)expr->numeric->text.length,
                 expr->numeric->text.start);
             break;
 
         case EXPRESSION_TYPE_STRING_LITERAL:
-            printf("StringLiteral: \"%.*s\"\n",
+            avLogF(AV_DEBUG,"StringLiteral: \"%.*s\"\n",
                 (int)expr->string->text.length,
                 expr->string->text.start);
             break;
 
         case EXPRESSION_TYPE_IDENTIFIER:
-            printf("Identifier: %.*s\n",
+            avLogF(AV_DEBUG,"Identifier: %.*s\n",
                 (int)expr->identifier->text.length,
                 expr->identifier->text.start);
             break;
 
         case EXPRESSION_TYPE_UNARY:
-            printf("UnaryExpression (%d):\n", expr->unary.type);
+            avLogF(AV_DEBUG,"UnaryExpression (%d):\n", expr->unary.type);
             printExpression(expressions, expr->unary.inner, indentLevel + 1);
             break;
 
         case EXPRESSION_TYPE_BINARY:
-            printf("BinaryExpression (%d):\n", expr->binary.type);
+            avLogF(AV_DEBUG,"BinaryExpression (%d):\n", expr->binary.type);
             printIndent(indentLevel + 1);
-            printf("Left:\n");
+            avLogF(AV_DEBUG,"Left:\n");
             printExpression(expressions, expr->binary.left, indentLevel + 2);
             printIndent(indentLevel + 1);
-            printf("Right:\n");
+            avLogF(AV_DEBUG,"Right:\n");
             printExpression(expressions, expr->binary.right, indentLevel + 2);
             break;
 
         case EXPRESSION_TYPE_NONE:
-            printf("Invalid/Empty Expression\n");
+            avLogF(AV_DEBUG,"Invalid/Empty Expression\n");
             break;
 
         default:
-            printf("Unknown Expression Type (%d)\n", expr->type);
+            avLogF(AV_DEBUG,"Unknown Expression Type (%d)\n", expr->type);
             break;
     }
 }
@@ -824,15 +881,15 @@ static void printExpression(struct Expression* expressions, Expression index, in
 void printType(AbstractSyntaxTree* ast, Type typeHandle, int indentLevel){
 	struct NamedType type = ast->types[typeHandle];
 	printIndent(indentLevel);
-	printf("Base: %.*s\n", (int)type.type.identifier->text.length, type.type.identifier->text.start);
+	avLogF(AV_DEBUG,"Base: %.*s\n", (int)type.type.identifier->text.length, type.type.identifier->text.start);
 	if(type.type.tagCount){
 		printIndent(indentLevel);
-		printf("Tags: [\n");
+		avLogF(AV_DEBUG,"Tags: [\n");
 		for(uint32 i = 0; i < type.type.tagCount; i++){
 			printExpression(ast->expressions, type.type.tags[i], indentLevel+1);
 		}
 		printIndent(indentLevel);
-		printf("]\n");
+		avLogF(AV_DEBUG,"]\n");
 	}
 }
 
@@ -842,109 +899,109 @@ void printStatement(AbstractSyntaxTree* ast, Statement handle, int indentLevel){
 	printIndent(indentLevel);
 	switch(statement.type){
 		case STATEMENT_TYPE_TYPEDEF:
-			printf("Typedef: {\n");
+			avLogF(AV_DEBUG,"Typedef: {\n");
 			printIndent(indentLevel+1);
-			printf("Type: {\n");
+			avLogF(AV_DEBUG,"Type: {\n");
 			printType(ast, statement.typeDefine.type, indentLevel+2);
 			printIndent(indentLevel+1);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			printIndent(indentLevel+1);
-			printf("Name: {\n");
+			avLogF(AV_DEBUG,"Name: {\n");
 			printIndent(indentLevel+2);
-			printf("%.*s\n", (int)statement.typeDefine.identifier->text.length, statement.typeDefine.identifier->text.start );
+			avLogF(AV_DEBUG,"%.*s\n", (int)statement.typeDefine.identifier->text.length, statement.typeDefine.identifier->text.start );
 			printIndent(indentLevel+1);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			printIndent(indentLevel);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			break;
 		case STATEMENT_TYPE_FUNCTION:
-			printf("Function: {\n");
+			avLogF(AV_DEBUG,"Function: {\n");
 			printIndent(indentLevel+1);
-			printf("Name: {\n");
+			avLogF(AV_DEBUG,"Name: {\n");
 			printIndent(indentLevel+2);
-			printf("%.*s\n", (int)statement.function.identifier->text.length, statement.function.identifier->text.start );
+			avLogF(AV_DEBUG,"%.*s\n", (int)statement.function.identifier->text.length, statement.function.identifier->text.start );
 			if(statement.function.parameterCount){
 				printIndent(indentLevel+1);
-				printf("Parameters: [\n");
+				avLogF(AV_DEBUG,"Parameters: [\n");
 				for(uint32 i = 0; i < statement.function.parameterCount; i++){
 					printStatement(ast, statement.function.parameters[i], indentLevel+2);
 				}
 				printIndent(indentLevel+1);
-				printf("]\n");
+				avLogF(AV_DEBUG,"]\n");
 			}
 			printIndent(indentLevel+1);
-			printf("ReturnType: {\n");
+			avLogF(AV_DEBUG,"ReturnType: {\n");
 			printType(ast, statement.function.returnType, indentLevel+2);
 			printIndent(indentLevel+1);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			if(statement.function.tagCount){
 				printIndent(indentLevel+1);
-				printf("Tags: [\n");
+				avLogF(AV_DEBUG,"Tags: [\n");
 				for(uint32 i = 0; i < statement.function.tagCount; i++){
 					printExpression(ast->expressions, statement.function.tags[i], indentLevel+2);
 				}
 				printIndent(indentLevel+1);
-				printf("]\n");
+				avLogF(AV_DEBUG,"]\n");
 			}
 			printIndent(indentLevel+1);
-			printf("Body: {\n");
+			avLogF(AV_DEBUG,"Body: {\n");
 			printStatement(ast, statement.function.body, indentLevel+2);
 			printIndent(indentLevel+1);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			printIndent(indentLevel);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			break;
 		case STATEMENT_TYPE_RETURN:
-			printf("Return: {\n");
+			avLogF(AV_DEBUG,"Return: {\n");
 			printExpression(ast->expressions, statement.expression, indentLevel+1);
 			printIndent(indentLevel);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			break;
 		case STATEMENT_TYPE_BLOCK:
-			printf("Statements: [\n");
+			avLogF(AV_DEBUG,"Statements: [\n");
 			for(uint32 i = 0; i < statement.block.statementCount; i++){
 				printStatement(ast, statement.block.statements[i], indentLevel+1);
 			}
 			printIndent(indentLevel);
-			printf("]\n");
+			avLogF(AV_DEBUG,"]\n");
 			break;
 		case STATEMENT_TYPE_DECLARATION:
-			printf("Declaration: {\n");
+			avLogF(AV_DEBUG,"Declaration: {\n");
 			printIndent(indentLevel+1);
-			printf("Type: {\n");
+			avLogF(AV_DEBUG,"Type: {\n");
 			printType(ast, statement.declaration.type, indentLevel+2);
 			printIndent(indentLevel+1);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			printIndent(indentLevel+1);
-			printf("Name: {\n");
+			avLogF(AV_DEBUG,"Name: {\n");
 			printIndent(indentLevel+2);
-			printf("%.*s\n", (int)statement.declaration.identifier->text.length, statement.declaration.identifier->text.start);
+			avLogF(AV_DEBUG,"%.*s\n", (int)statement.declaration.identifier->text.length, statement.declaration.identifier->text.start);
 			printIndent(indentLevel+1);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			if(statement.declaration.initializer!=INVALID_EXPRESSION){
 				printIndent(indentLevel+1);
-				printf("Value: {\n");
+				avLogF(AV_DEBUG,"Value: {\n");
 				printExpression(ast->expressions, statement.declaration.initializer, indentLevel+2);
 				printIndent(indentLevel+1);
-				printf("}\n");
+				avLogF(AV_DEBUG,"}\n");
 			}
 			printIndent(indentLevel);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			break;
 		case STATEMENT_TYPE_EXPRESSION:
-			printf("Expression: {\n");
+			avLogF(AV_DEBUG,"Expression: {\n");
 			printExpression(ast->expressions, statement.expression, indentLevel+1);
 			printIndent(indentLevel);
-			printf("}\n");
+			avLogF(AV_DEBUG,"}\n");
 			break;
 		default:
-			printf("Unknown Statement Type(%d)\n", statement.type);
+			avLogF(AV_DEBUG,"Unknown Statement Type(%d)\n", statement.type);
 			break;
 	}
 }
 
 void printAST(AbstractSyntaxTree* ast) {
-    printf("=== Abstract Syntax Tree ===\n");
+    avLogF(AV_DEBUG,"=== Abstract Syntax Tree ===\n");
     for(uint32 i = 0; i < ast->rootStatementCount; i++){
 		printStatement(ast, ast->rootStatements[i], 0);
 	}

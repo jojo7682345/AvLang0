@@ -8,9 +8,9 @@
 			"name": "(gdb) Launch",
 			"type": "cppdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}/bin/AvLang",
+			"program": "${workspaceFolder}/bin/avLang",
 			"args": [
-				"AvLang.project","-o","out", "--v-debug"
+				"test/tokenizer.av", "--v-debug", "--d-tokenize"
 			],
 			"stopAtEntry": false,
 			"cwd": "${workspaceFolder}",
